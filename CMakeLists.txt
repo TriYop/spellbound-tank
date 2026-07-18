@@ -49,6 +49,7 @@ target_sources(Tank PRIVATE
     Source/DSP/BandpassFilter.h
     Source/DSP/RmsDetector.h
     Source/DSP/LookaheadDelay.h
+    Source/DSP/DuckingEnvelope.h
 )
 
 target_compile_definitions(Tank PUBLIC
@@ -103,6 +104,13 @@ add_executable(test_lookaheaddelay
 target_include_directories(test_lookaheaddelay PRIVATE Source/ Tests/)
 target_compile_features(test_lookaheaddelay PRIVATE cxx_std_20)
 add_test(NAME LookaheadDelay COMMAND test_lookaheaddelay)
+
+add_executable(test_duckingenvelope
+    Tests/test_duckingenvelope.cpp
+)
+target_include_directories(test_duckingenvelope PRIVATE Source/ Tests/)
+target_compile_features(test_duckingenvelope PRIVATE cxx_std_20)
+add_test(NAME DuckingEnvelope COMMAND test_duckingenvelope)
 
 # ── Install rules ─────────────────────────────────────────────────────────────
 if(NOT CMAKE_BUILD_TYPE)
