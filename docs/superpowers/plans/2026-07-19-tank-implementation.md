@@ -805,15 +805,21 @@ int main()
         CHECK_MSG (out == 0.0f, "reset() should clear the delay buffer");
     }
 
-    // delaySamples larger than the prepared max is clamped, not a crash.
+    // delaySamples larger than the prepared max is clamped to (bufferSize - 1),
+    // not a crash and not garbage: once the buffer has wrapped enough times,
+    // the output settles into the fixed, computable delay the clamp implies.
     {
         LookaheadDelay d;
-        d.prepare (48000.0, 5.0f); // small buffer
+        d.prepare (48000.0, 5.0f); // max 5ms @ 48kHz -> buffer size = ceil(240)+1 = 241
+        const int bufferSize    = 241;
+        const int clampedDelay  = bufferSize - 1; // 240
+        const int totalCalls    = 2000;
         float out = 0.0f;
-        for (int n = 0; n < 2000; ++n)
+        for (int n = 0; n < totalCalls; ++n)
             out = d.process (static_cast<float> (n), 100000); // way past buffer size
-        CHECK_MSG (true, "process() with an out-of-range delay should not crash");
-        (void) out;
+        const float expected = static_cast<float> (totalCalls - 1 - clampedDelay);
+        CHECK_MSG (out == expected,
+                   "an out-of-range delay should clamp to (bufferSize - 1), not crash or return garbage");
     }
 
     TEST_SUMMARY();
