@@ -22,8 +22,6 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     };
 
-    Knob& addKnob (const juce::String& paramId, const juce::String& labelText);
-
     TankAudioProcessor& processor_;
     TankLookAndFeel lookAndFeel_;
 

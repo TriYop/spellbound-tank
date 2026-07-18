@@ -115,12 +115,13 @@ void TankAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     const bool   hasSidechain = sideIn.getNumChannels() > 0 && sideIn.getReadPointer (0) != nullptr;
     const float* sc           = hasSidechain ? sideIn.getReadPointer (0) : nullptr;
 
+    float reductionDb = 0.0f;
     for (int n = 0; n < numSamples; ++n)
     {
-        const float scInput      = (sc != nullptr) ? sc[n] : 0.0f;
-        const float scFiltered   = sidechainFilter_.process (scInput);
-        const float scLevelDb    = sidechainRms_.process (scFiltered);
-        const float reductionDb  = duckEnvelope_.process (scLevelDb);
+        const float scInput    = (sc != nullptr) ? sc[n] : 0.0f;
+        const float scFiltered = sidechainFilter_.process (scInput);
+        const float scLevelDb  = sidechainRms_.process (scFiltered);
+        reductionDb = duckEnvelope_.process (scLevelDb);
 
         const float gain = bypassed ? 1.0f : juce::Decibels::decibelsToGain (-reductionDb);
         gainSmoothed_.setTargetValue (gain);
@@ -132,9 +133,8 @@ void TankAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
             const float delayed = lookaheadDelay_[static_cast<size_t> (ch)].process (dry, anticipationSamples);
             mainOut.getWritePointer (ch)[n] = delayed * appliedGain;
         }
-
-        currentReductionDb_.store (bypassed ? 0.0f : reductionDb, std::memory_order_relaxed);
     }
+    currentReductionDb_.store (bypassed ? 0.0f : reductionDb, std::memory_order_relaxed);
 }
 
 bool TankAudioProcessor::hasEditor() const { return true; }
