@@ -50,6 +50,9 @@ target_sources(Tank PRIVATE
     Source/DSP/RmsDetector.h
     Source/DSP/LookaheadDelay.h
     Source/DSP/DuckingEnvelope.h
+    Source/UI/TankLookAndFeel.h
+    Source/UI/TankLookAndFeel.cpp
+    Source/UI/TankGrMeter.h
 )
 
 target_compile_definitions(Tank PUBLIC
