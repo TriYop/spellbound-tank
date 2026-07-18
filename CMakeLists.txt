@@ -48,6 +48,7 @@ target_sources(Tank PRIVATE
     Source/PluginEditor.cpp
     Source/DSP/BandpassFilter.h
     Source/DSP/RmsDetector.h
+    Source/DSP/LookaheadDelay.h
 )
 
 target_compile_definitions(Tank PUBLIC
@@ -95,6 +96,13 @@ add_executable(test_rmsdetector
 target_include_directories(test_rmsdetector PRIVATE Source/ Tests/)
 target_compile_features(test_rmsdetector PRIVATE cxx_std_20)
 add_test(NAME RmsDetector COMMAND test_rmsdetector)
+
+add_executable(test_lookaheaddelay
+    Tests/test_lookaheaddelay.cpp
+)
+target_include_directories(test_lookaheaddelay PRIVATE Source/ Tests/)
+target_compile_features(test_lookaheaddelay PRIVATE cxx_std_20)
+add_test(NAME LookaheadDelay COMMAND test_lookaheaddelay)
 
 # ── Install rules ─────────────────────────────────────────────────────────────
 if(NOT CMAKE_BUILD_TYPE)
