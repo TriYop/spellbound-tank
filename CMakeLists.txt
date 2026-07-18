@@ -46,6 +46,7 @@ juce_add_plugin(Tank
 target_sources(Tank PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
+    Source/DSP/BandpassFilter.h
 )
 
 target_compile_definitions(Tank PUBLIC
@@ -76,6 +77,16 @@ clap_juce_extensions_plugin(
     CLAP_FEATURES audio-effect utility compressor
     CLAP_PROCESS_EVENTS_RESOLUTION_SAMPLES 64
 )
+
+# ── Unit tests (no JUCE dependency) ──────────────────────────────────────────
+enable_testing()
+
+add_executable(test_bandpassfilter
+    Tests/test_bandpassfilter.cpp
+)
+target_include_directories(test_bandpassfilter PRIVATE Source/ Tests/)
+target_compile_features(test_bandpassfilter PRIVATE cxx_std_20)
+add_test(NAME BandpassFilter COMMAND test_bandpassfilter)
 
 # ── Install rules ─────────────────────────────────────────────────────────────
 if(NOT CMAKE_BUILD_TYPE)
