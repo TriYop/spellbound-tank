@@ -7,10 +7,10 @@ TankAudioProcessorEditor::TankAudioProcessorEditor (TankAudioProcessor& p)
     setLookAndFeel (&lookAndFeel_);
 
     static const std::array<std::pair<const char*, const char*>, 4> kKnobDefs { {
-        { "depth",        "Depth" },
-        { "anticipation", "Anticipation" },
-        { "release",      "Release" },
-        { "sensitivity",  "Sensitivity" },
+        { "depth",        "Mitigation" },
+        { "anticipation", "Reflex" },
+        { "release",      "Cooldown" },
+        { "sensitivity",  "Aggro Trigger" },
     } };
 
     for (size_t i = 0; i < knobs_.size(); ++i)

@@ -9,19 +9,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout TankAudioProcessor::createPa
 
     params.push_back (std::make_unique<AudioParameterBool> ("bypass", "Bypass", false));
 
-    params.push_back (std::make_unique<AudioParameterFloat> ("depth", "Depth",
+    params.push_back (std::make_unique<AudioParameterFloat> ("depth", "Mitigation",
         NormalisableRange<float> (0.f, 12.f, 0.1f), 6.f,
         AudioParameterFloatAttributes{}.withLabel ("dB")));
 
-    params.push_back (std::make_unique<AudioParameterFloat> ("anticipation", "Anticipation",
+    params.push_back (std::make_unique<AudioParameterFloat> ("anticipation", "Reflex",
         NormalisableRange<float> (1.f, 20.f, 0.1f), 5.f,
         AudioParameterFloatAttributes{}.withLabel ("ms")));
 
-    params.push_back (std::make_unique<AudioParameterFloat> ("release", "Release",
+    params.push_back (std::make_unique<AudioParameterFloat> ("release", "Cooldown",
         NormalisableRange<float> (50.f, 500.f, 1.f), 150.f,
         AudioParameterFloatAttributes{}.withLabel ("ms")));
 
-    params.push_back (std::make_unique<AudioParameterFloat> ("sensitivity", "Sensitivity",
+    params.push_back (std::make_unique<AudioParameterFloat> ("sensitivity", "Aggro Trigger",
         NormalisableRange<float> (-40.f, 0.f, 0.1f), -20.f,
         AudioParameterFloatAttributes{}.withLabel ("dB")));
 
