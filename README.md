@@ -4,19 +4,19 @@ A sidechain "pumping" compressor (VST3 / CLAP / Standalone) that ducks a bus —
 
 ![Tank editor](docs/images/tank-editor.png)
 
-## The MMORPG parallel
+Think of the kick as the boss and your bass as the tank standing in front of it, taking the hit so the rest of the party — the mids, the vocals — don't get one-shot. Every time the kick swings, your bass needs to pull aggro off it for a moment and eat the damage.
 
-Tank's controls are named after the MMORPG tanking role it's modeled on: the tank's job is to grab the boss's attention and eat the hit so the rest of the party doesn't have to. Here, the "boss" is the kick, and the instrument being ducked is the party member standing in the blast radius.
+**Aggro Trigger** is how easily the boss notices you — turn it down (toward −40 dB) and even a light tap pulls aggro and triggers a duck; turn it up (toward 0 dB) and only the boss's biggest hits get a reaction. **Reflex** is your reaction time: it's the lookahead, so the tank raises its shield a few milliseconds *before* the hit actually lands instead of flinching after the fact — the shield-up animation is baked into the plugin's reported latency, so your DAW's plugin-delay compensation lines everything back up. **Mitigation** is your armor rating — how much of the hit you actually absorb, from a light graze (0 dB) up to a full block (12 dB). **Cooldown** is how long it takes you to lower your shield and get back to normal after the boss stops swinging (50–500 ms) — and if the boss swings again mid-cooldown, you don't reset to zero, you just keep tanking from wherever your shield currently is, no flinch, no re-aggro stutter. **Bypass** is you dropping aggro and stepping out of the party entirely — the signal walks straight through untouched (still shield-raised/lookahead-delayed under the hood, so nothing jumps when you toggle it).
 
-| Plugin parameter | APVTS id | MMORPG tank concept | What it actually does |
+The GR meter is your health bar, live: watch it dip every time the boss connects, at a smooth ~30 Hz refresh.
+
+| Parameter | APVTS id | Range | Default |
 |---|---|---|---|
-| **Aggro Trigger** | `sensitivity` | Aggro threshold — how easily the tank pulls the boss's attention | RMS level (post 50–150 Hz bandpass, sidechain-only) that must be crossed to trigger a duck |
-| **Reflex** | `anticipation` | Reaction time before the tank raises its shield | Lookahead (1–20 ms): the main signal is delayed internally so the duck lands in sync with the sidechain hit instead of trailing it; also the reported plugin latency |
-| **Mitigation** | `depth` | Damage mitigation — how much of the hit the tank's armor absorbs | Maximum gain reduction applied on a duck (0–12 dB) |
-| **Cooldown** | `release` | Ability cooldown — time to recover before the next pull | Ramp-back time (50–500 ms) once the sidechain signal falls back below the Aggro Trigger threshold |
-| **Bypass** | `bypass` | Tank drops aggro / leaves the party | Passes the main signal through untouched (still lookahead-delayed, so plugin latency never jumps) |
-
-The GR meter is the "damage taken" bar: it shows how much gain reduction is currently being applied, live, at ~30 Hz.
+| Aggro Trigger | `sensitivity` | −40 to 0 dB | −20 dB |
+| Reflex | `anticipation` | 1–20 ms | 5 ms |
+| Mitigation | `depth` | 0–12 dB | 6 dB |
+| Cooldown | `release` | 50–500 ms | 150 ms |
+| Bypass | `bypass` | on/off | off |
 
 ## Signal flow
 
