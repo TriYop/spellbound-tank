@@ -6,9 +6,13 @@
 #include "audioplugins/common/hui/dgl/RotaryKnob.h"
 #include "audioplugins/common/hui/dgl/ToggleSwitch.h"
 #include "audioplugins/common/hui/dgl/VuMeter.h"
+#include "audioplugins/common/hui/dgl/PresetSelector.h"
+#include "audioplugins/common/hui/dgl/Button.h"
+#include "audioplugins/common/presets/PresetBrowser.h"
 
 #include <array>
 #include <memory>
+#include <vector>
 
 START_NAMESPACE_DISTRHO
 
@@ -25,8 +29,10 @@ START_NAMESPACE_DISTRHO
    reduction value can't be a DPF output parameter (clap-validator rejects
    those).
 
-   The presets panel (PresetSelector + SAVE/DELETE buttons) is added in
-   Task 7.
+   The presets panel (PresetSelector + SAVE/DELETE buttons, backed by
+   Common's PresetBrowser and Tank's compiled-in factory presets -- see
+   Source/FactoryPresets.h) is Tank's first presets system; the JUCE-era
+   plugin never had one.
  */
 class TankUI : public UI
 {
@@ -40,6 +46,8 @@ protected:
 
     // -- Widget Callbacks ---------------------------------------------------
     void onNanoDisplay() override;
+
+    void uiFileBrowserSelected(const char* filename) override;
 
 private:
     // Raw, non-owning: TankUI does not own the DSP instance's lifetime, DPF
@@ -56,6 +64,15 @@ private:
     std::unique_ptr<audioplugins::common::hui::dgl::RotaryKnob> fSensitivityKnob;
     std::unique_ptr<audioplugins::common::hui::dgl::ToggleSwitch> fBypassSwitch;
     std::unique_ptr<audioplugins::common::hui::dgl::VuMeter> fGrMeter;
+
+    void applyPreset(const audioplugins::common::presets::Preset& preset);
+    std::vector<audioplugins::common::presets::ParameterValue> captureCurrentParameters() const;
+    void refreshPresetControls();
+
+    audioplugins::common::presets::PresetBrowser fPresetBrowser;
+    std::unique_ptr<audioplugins::common::hui::dgl::PresetSelector> fPresetSelector;
+    std::unique_ptr<audioplugins::common::hui::dgl::Button> fSaveButton;
+    std::unique_ptr<audioplugins::common::hui::dgl::Button> fDeleteButton;
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TankUI)
 };
