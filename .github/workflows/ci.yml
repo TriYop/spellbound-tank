@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    # Windows/macOS are unverified for the same reasons documented in Hex's
+    # ci.yml: nobody has run a DPF/DGL build there yet, and the dgl-opengl
+    # CXX_EXTENSIONS ON workaround above is a documented no-op on MSVC.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        build_type: [Release]
+
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev libjack-jackd2-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libfreetype-dev libfontconfig1-dev \
+            libglu1-mesa-dev libwebkit2gtk-4.1-dev \
+            xvfb
+
+      - name: Configure Common repo access
+        # github.com/TriYop/spellbound-common (FetchContent'd below) is
+        # private -- same COMMON_REPO_TOKEN fine-grained PAT secret Hex/
+        # Outflank already use. This secret must exist in the
+        # spellbound-tank repo's own Settings > Secrets and variables >
+        # Actions before this step can succeed -- that's a manual,
+        # non-scriptable step; verify it's present before relying on green CI.
+        run: git config --global url."https://x-access-token:${{ secrets.COMMON_REPO_TOKEN }}@github.com/TriYop/spellbound-common".insteadOf "https://github.com/TriYop/spellbound-common"
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel
+
+      - name: Test
+        working-directory: build
+        run: ctest --build-config ${{ matrix.build_type }} --output-on-failure

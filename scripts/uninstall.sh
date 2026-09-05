@@ -17,16 +17,16 @@ echo "Uninstalling Tank..."
 
 remove "${HOME}/.vst3/Tank.vst3"
 remove "${HOME}/.clap/Tank.clap"
-remove "${HOME}/.local/bin/Tank"
+remove "${HOME}/.lv2/Tank.lv2"
 
 if [[ $EUID -eq 0 ]]; then
     remove "/usr/lib/vst3/Tank.vst3"
     remove "/usr/lib/clap/Tank.clap"
-    remove "/usr/local/bin/Tank"
+    remove "/usr/lib/lv2/Tank.lv2"
 else
     for path in "/usr/lib/vst3/Tank.vst3" \
                 "/usr/lib/clap/Tank.clap" \
-                "/usr/local/bin/Tank"; do
+                "/usr/lib/lv2/Tank.lv2"; do
         if [[ -e "$path" ]]; then
             echo "  Skipping $path (re-run with sudo to remove)"
         fi
