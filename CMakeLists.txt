@@ -107,11 +107,11 @@ target_include_directories(test_sidechainguard PRIVATE Source/ Tests/)
 target_compile_features(test_sidechainguard PRIVATE cxx_std_20)
 add_test(NAME SidechainGuard COMMAND test_sidechainguard)
 
-# Task 3 (SidechainGuard) and Task 7 (FactoryPresets) each append their own
-# add_executable/add_test block here once they create their test files --
-# deliberately not included yet, so this task's own build-verification step
-# (Step 9 below) has a CMakeLists.txt that only references files that exist
-# at this point in the plan.
+add_executable(test_factorypresets Tests/test_factorypresets.cpp)
+target_include_directories(test_factorypresets PRIVATE Source/ Tests/)
+target_link_libraries(test_factorypresets PRIVATE AudioPluginsCommon::presets)
+target_compile_features(test_factorypresets PRIVATE cxx_std_20)
+add_test(NAME FactoryPresets COMMAND test_factorypresets)
 
 # ── Install rules ─────────────────────────────────────────────────────────────
 # DPF writes all format outputs under a flat bin/ dir -- no Standalone

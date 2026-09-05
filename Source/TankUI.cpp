@@ -1,5 +1,10 @@
 #include "TankUI.h"
 
+#include "FactoryPresets.h"
+
+#include <cstdlib>
+#include <string>
+
 START_NAMESPACE_DISTRHO
 
 namespace {
@@ -32,6 +37,23 @@ const hui::dgl::VuMeterPalette kTankGrMeterPalette = {
     /* fillLow    */ {0xcc, 0x88, 0x33, 0xff}, // TankCol::valueArc()
     /* fillHigh   */ {0xff, 0xaa, 0x44, 0xff}, // TankCol::valueArcGlow()
     /* peakLine   */ {0xff, 0xff, 0xff, 0xff}, // white (VuMeterPalette default)
+};
+
+const hui::dgl::ButtonPalette kTankButtonPalette = {
+    /* background         */ {0x3a, 0x2c, 0x1a, 0xff}, // TankCol::trackArc()
+    /* backgroundDisabled */ {0x1c, 0x14, 0x10, 0xff}, // TankCol::knobBottom()
+    /* border             */ {0x6a, 0x53, 0x40, 0xff}, // TankCol::knobRim()
+    /* text               */ {0xd8, 0xc8, 0xa8, 0xff}, // TankCol::textPrimary()
+    /* textDisabled       */ {0x7a, 0x6a, 0x55, 0xff}, // TankCol::textDim()
+};
+
+const hui::dgl::PresetSelectorPalette kTankPresetSelectorPalette = {
+    /* closedBackground */ {0x3a, 0x2c, 0x1a, 0xff}, // TankCol::trackArc()
+    /* listBackground   */ {0x1c, 0x14, 0x10, 0xff}, // TankCol::bg()
+    /* border           */ {0x6a, 0x53, 0x40, 0xff}, // TankCol::knobRim()
+    /* text             */ {0xd8, 0xc8, 0xa8, 0xff}, // TankCol::textPrimary()
+    /* textFactory      */ {0x7a, 0x6a, 0x55, 0xff}, // TankCol::textDim()
+    /* rowHighlight     */ {0xcc, 0x88, 0x33, 0x40}, // TankCol::valueArc() at low alpha
 };
 
 constexpr hui::Colour kBackgroundColor{0x1c, 0x14, 0x10, 0xff};  // TankCol::bg()          0xff1c1410
@@ -159,6 +181,35 @@ std::unique_ptr<hui::dgl::VuMeter> makeGrMeter(TankUI& ui)
     return meter;
 }
 
+std::unique_ptr<hui::dgl::PresetSelector> makePresetSelector(TankUI& ui)
+{
+    std::unique_ptr<hui::dgl::PresetSelector> selector(new hui::dgl::PresetSelector(&ui));
+    selector->setPalette(kTankPresetSelectorPalette);
+    selector->setClosedSize(kPresetSelectorW, kPresetBarRowH);
+    selector->setAbsolutePos(static_cast<int>(kPresetBarX), static_cast<int>(kPresetBarY));
+    return selector;
+}
+
+std::unique_ptr<hui::dgl::Button> makeButton(TankUI& ui, const char* label, float x)
+{
+    std::unique_ptr<hui::dgl::Button> button(new hui::dgl::Button(&ui));
+    button->setPalette(kTankButtonPalette);
+    button->setLabel(label);
+    button->setSize(kPresetButtonW, kPresetBarRowH);
+    button->setAbsolutePos(static_cast<int>(x), static_cast<int>(kPresetBarY));
+    return button;
+}
+
+// Linux-only for now, matching Hex's precedent -- Tank's Windows/macOS
+// builds aren't verified yet either (see Task 8's CI note).
+std::string tankUserPresetsDirectory()
+{
+    const char* home = std::getenv("HOME");
+    if (home == nullptr)
+        return "/tmp/Tank/presets";
+    return std::string(home) + "/.config/Tank/presets";
+}
+
 } // namespace
 
 TankUI::TankUI()
@@ -169,9 +220,41 @@ TankUI::TankUI()
       fReleaseKnob(makeKnob(*this, kReleaseSpec)),
       fSensitivityKnob(makeKnob(*this, kSensitivitySpec)),
       fBypassSwitch(makeBypassSwitch(*this)),
-      fGrMeter(makeGrMeter(*this))
+      fGrMeter(makeGrMeter(*this)),
+      fPresetBrowser(tankFactoryPresets(), tankUserPresetsDirectory(), "com.spellbound.tank"),
+      fPresetSelector(makePresetSelector(*this)),
+      fSaveButton(makeButton(*this, "SAVE", kSaveButtonX)),
+      fDeleteButton(makeButton(*this, "DELETE", kDeleteButtonX))
 {
     loadSharedResources();
+
+    fPresetSelector->onIndexSelected = [this](const int index)
+    {
+        if (const auto* preset = fPresetBrowser.selectIndex(index))
+        {
+            applyPreset(*preset);
+            refreshPresetControls();
+        }
+    };
+
+    fDeleteButton->onClick = [this]()
+    {
+        if (fPresetBrowser.deleteCurrent())
+            refreshPresetControls();
+    };
+
+    fSaveButton->onClick = [this]()
+    {
+        const std::string startDir = tankUserPresetsDirectory();
+        FileBrowserOptions options;
+        options.saving = true;
+        options.defaultName = "New Preset.xml";
+        options.title = "Save Tank Preset";
+        options.startDir = startDir.c_str();
+        openFileBrowser(options);
+    };
+
+    refreshPresetControls();
 }
 
 void TankUI::parameterChanged(const uint32_t index, const float value)
@@ -207,6 +290,63 @@ void TankUI::uiIdle()
         return;
 
     fGrMeter->pushLevel(normalized);
+}
+
+void TankUI::uiFileBrowserSelected(const char* filename)
+{
+    if (filename == nullptr)
+        return; // user cancelled the dialog
+
+    std::string path(filename);
+    const size_t slash = path.find_last_of("/\\");
+    std::string base = (slash == std::string::npos) ? path : path.substr(slash + 1);
+    const size_t dot = base.find_last_of('.');
+    if (dot != std::string::npos)
+        base = base.substr(0, dot);
+
+    if (fPresetBrowser.saveAs(base, captureCurrentParameters()))
+        refreshPresetControls();
+}
+
+void TankUI::applyPreset(const audioplugins::common::presets::Preset& preset)
+{
+    for (const auto& pv : preset.parameters)
+    {
+        uint32_t paramIndex;
+
+        if (pv.id == "bypass")            { fBypassSwitch->setPosition(static_cast<int>(pv.value + 0.5f)); paramIndex = kParameterBypass; }
+        else if (pv.id == "depth")        { fDepthKnob->setValue(pv.value);                                paramIndex = kParameterDepth; }
+        else if (pv.id == "anticipation") { fAnticipationKnob->setValue(pv.value);                         paramIndex = kParameterAnticipation; }
+        else if (pv.id == "release")      { fReleaseKnob->setValue(pv.value);                               paramIndex = kParameterRelease; }
+        else if (pv.id == "sensitivity")  { fSensitivityKnob->setValue(pv.value);                           paramIndex = kParameterSensitivity; }
+        else continue; // unknown id (forward-compatible with a future schema addition) -- ignore
+
+        editParameter(paramIndex, true);
+        setParameterValue(paramIndex, pv.value);
+        editParameter(paramIndex, false);
+    }
+}
+
+std::vector<audioplugins::common::presets::ParameterValue> TankUI::captureCurrentParameters() const
+{
+    return {
+        {"bypass", static_cast<float>(fBypassSwitch->getPosition())},
+        {"depth", fDepthKnob->getValue()},
+        {"anticipation", fAnticipationKnob->getValue()},
+        {"release", fReleaseKnob->getValue()},
+        {"sensitivity", fSensitivityKnob->getValue()},
+    };
+}
+
+void TankUI::refreshPresetControls()
+{
+    fPresetSelector->setEntries(fPresetBrowser.getEntries());
+    fPresetSelector->setCurrentIndex(fPresetBrowser.getCurrentIndex());
+
+    const auto entries = fPresetBrowser.getEntries();
+    const int idx = fPresetBrowser.getCurrentIndex();
+    const bool isFactory = (idx >= 0 && static_cast<size_t>(idx) < entries.size()) ? entries[static_cast<size_t>(idx)].isFactory : true;
+    fDeleteButton->setEnabled(!isFactory);
 }
 
 void TankUI::onNanoDisplay()
