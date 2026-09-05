@@ -102,6 +102,11 @@ target_include_directories(test_duckingenvelope PRIVATE Source/ Tests/)
 target_compile_features(test_duckingenvelope PRIVATE cxx_std_20)
 add_test(NAME DuckingEnvelope COMMAND test_duckingenvelope)
 
+add_executable(test_sidechainguard Tests/test_sidechainguard.cpp)
+target_include_directories(test_sidechainguard PRIVATE Source/ Tests/)
+target_compile_features(test_sidechainguard PRIVATE cxx_std_20)
+add_test(NAME SidechainGuard COMMAND test_sidechainguard)
+
 # Task 3 (SidechainGuard) and Task 7 (FactoryPresets) each append their own
 # add_executable/add_test block here once they create their test files --
 # deliberately not included yet, so this task's own build-verification step
