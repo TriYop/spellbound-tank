@@ -54,3 +54,64 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest --build-config ${{ matrix.build_type }} --output-on-failure
+
+      # --- Plugin validators (Linux-only for now) ---
+      #
+      # Windows/macOS validator support is explicitly deferred: those legs
+      # don't yet have a verified build (continue-on-error above), so
+      # there's nothing meaningful to validate there yet.
+
+      - name: Download pluginval
+        if: runner.os == 'Linux'
+        run: |
+          curl -sL -o pluginval_Linux.zip \
+            https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Linux.zip
+          unzip -o pluginval_Linux.zip
+          chmod +x pluginval
+
+      - name: Validate VST3 with pluginval
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a ./pluginval --strictness-level 5 --validate build/bin/Tank.vst3
+
+      - name: Download clap-validator
+        if: runner.os == 'Linux'
+        run: |
+          curl -sL -o clap-validator.zip \
+            https://github.com/free-audio/clap-validator/releases/download/0.4.1/clap-validator-0.4.1-127-g152b982-ubuntu-22.04.zip
+          unzip -o clap-validator.zip
+          tar -xzf clap-validator-*-ubuntu-22.04.tar.gz
+          chmod +x clap-validator
+
+      - name: Validate CLAP with clap-validator
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a ./clap-validator validate build/bin/Tank.clap
+
+      - name: Install lv2lint build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          # libelf-dev is required by -Delf-tests=enabled below (the ELF
+          # symbol-visibility test) -- baked in from day one here, unlike
+          # Hex's original CI pass which discovered this dependency was
+          # missing only after a failed build; see Hex/CLAUDE.md's CI
+          # findings for the original discovery.
+          sudo apt-get install -y liblilv-dev lv2-dev libelf-dev meson ninja-build
+
+      - name: Build lv2lint
+        if: runner.os == 'Linux'
+        run: |
+          git clone --depth 1 https://github.com/sfztools/lv2lint /tmp/lv2lint
+          meson setup -Donline-tests=disabled -Delf-tests=enabled -Dx11-tests=disabled /tmp/lv2lint/build /tmp/lv2lint
+          ninja -C /tmp/lv2lint/build
+
+      - name: Validate LV2 with lv2lint
+        if: runner.os == 'Linux'
+        # Same DPF-wide Plugin Class finding Hex's lv2lint run hits (DPF's
+        # own LV2 TTL generator emits doap:Project alongside lv2:Plugin) --
+        # non-blocking until/unless that's fixed upstream in DPF itself.
+        continue-on-error: true
+        run: |
+          export LV2_PATH="/usr/lib/lv2:${GITHUB_WORKSPACE}/build/bin"
+          export LD_PRELOAD="/tmp/lv2lint/build/lv2lint.so"
+          /tmp/lv2lint/build/lv2lint.bin -s lv2_generate_ttl "https://spellbound.audio/plugins/tank"
