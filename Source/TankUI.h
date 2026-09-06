@@ -69,6 +69,20 @@ private:
     std::vector<audioplugins::common::presets::ParameterValue> captureCurrentParameters() const;
     void refreshPresetControls();
 
+    // Tracks which preset's values the live parameters are actually known to
+    // match -- independent of fPresetBrowser.getCurrentIndex(), which is
+    // pure bookkeeping (e.g. deleteCurrent() resets it to 0 without applying
+    // that preset's values, and PresetBrowser has no way to look up a
+    // preset's parameter values by index without also mutating that
+    // bookkeeping, since selectIndex() is its only accessor for a preset's
+    // values). Set to an index ONLY right after applyPreset() has actually
+    // pushed that preset's values into the live parameters (onIndexSelected
+    // below); reset to -1 whenever an operation invalidates that match
+    // (DELETE, SAVE) without applying anything back to the live parameters.
+    // -1 means "no preset provably selected", which refreshPresetControls()
+    // renders as "(no preset)" -- never a guess.
+    int fDisplayedPresetIndex = -1;
+
     audioplugins::common::presets::PresetBrowser fPresetBrowser;
     std::unique_ptr<audioplugins::common::hui::dgl::PresetSelector> fPresetSelector;
     std::unique_ptr<audioplugins::common::hui::dgl::Button> fSaveButton;

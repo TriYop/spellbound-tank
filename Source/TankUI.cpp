@@ -233,6 +233,8 @@ TankUI::TankUI()
         if (const auto* preset = fPresetBrowser.selectIndex(index))
         {
             applyPreset(*preset);
+            // Only now do the live parameters actually match entry `index`.
+            fDisplayedPresetIndex = index;
             refreshPresetControls();
         }
     };
@@ -240,7 +242,14 @@ TankUI::TankUI()
     fDeleteButton->onClick = [this]()
     {
         if (fPresetBrowser.deleteCurrent())
+        {
+            // deleteCurrent() resets PresetBrowser's own bookkeeping to
+            // index 0 without applying that (or any) preset's values to the
+            // live parameters -- the live values are still whatever they
+            // were before the deleted preset. Nothing is "selected" anymore.
+            fDisplayedPresetIndex = -1;
             refreshPresetControls();
+        }
     };
 
     fSaveButton->onClick = [this]()
@@ -305,7 +314,18 @@ void TankUI::uiFileBrowserSelected(const char* filename)
         base = base.substr(0, dot);
 
     if (fPresetBrowser.saveAs(base, captureCurrentParameters()))
+    {
+        // saveAs() writes the current live values out as a new user preset
+        // and selects it in PresetBrowser's own bookkeeping, but it never
+        // applies anything back to the live parameters (there is nothing to
+        // apply -- the file was just written from them). Per the same rule
+        // as DELETE, only onIndexSelected's applyPreset() is allowed to mark
+        // a preset as displayed-selected, so treat this as "no preset"
+        // rather than special-casing the fact that the values happen to
+        // still match what was just saved.
+        fDisplayedPresetIndex = -1;
         refreshPresetControls();
+    }
 }
 
 void TankUI::applyPreset(const audioplugins::common::presets::Preset& preset)
@@ -340,12 +360,19 @@ std::vector<audioplugins::common::presets::ParameterValue> TankUI::captureCurren
 
 void TankUI::refreshPresetControls()
 {
-    fPresetSelector->setEntries(fPresetBrowser.getEntries());
-    fPresetSelector->setCurrentIndex(fPresetBrowser.getCurrentIndex());
-
+    // Deliberately drive both the dropdown's selection and the DELETE
+    // button off fDisplayedPresetIndex, NOT fPresetBrowser.getCurrentIndex():
+    // the latter is PresetBrowser's own internal bookkeeping (e.g. it points
+    // at index 0 right after a delete, even though no preset's values were
+    // applied) and would otherwise let the dropdown claim a preset is loaded
+    // when the live parameters don't actually match it.
     const auto entries = fPresetBrowser.getEntries();
-    const int idx = fPresetBrowser.getCurrentIndex();
-    const bool isFactory = (idx >= 0 && static_cast<size_t>(idx) < entries.size()) ? entries[static_cast<size_t>(idx)].isFactory : true;
+    fPresetSelector->setEntries(entries);
+    fPresetSelector->setCurrentIndex(fDisplayedPresetIndex);
+
+    const bool isFactory = (fDisplayedPresetIndex >= 0 && static_cast<size_t>(fDisplayedPresetIndex) < entries.size())
+                                ? entries[static_cast<size_t>(fDisplayedPresetIndex)].isFactory
+                                : true;
     fDeleteButton->setEnabled(!isFactory);
 }
 
