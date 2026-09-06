@@ -1,6 +1,6 @@
 # Tank
 
-A sidechain "pumping" compressor (VST3 / CLAP / Standalone) that ducks a bus — typically bass — whenever a sidechain signal — typically the kick — hits, carving out room in the low end. Fixed-depth trigger ducking in the vein of Kickstart/LFOTool, not a ratio-based compressor.
+A sidechain "pumping" compressor (VST3 / CLAP / LV2) that ducks a bus — typically bass — whenever a sidechain signal — typically the kick — hits, carving out room in the low end. Fixed-depth trigger ducking in the vein of Kickstart/LFOTool, not a ratio-based compressor.
 
 ![Tank editor](docs/images/tank-editor.png)
 
@@ -10,7 +10,7 @@ Think of the kick as the boss and your bass as the tank standing in front of it,
 
 The GR meter is your health bar, live: watch it dip every time the boss connects, at a smooth ~30 Hz refresh.
 
-| Parameter | APVTS id | Range | Default |
+| Parameter | Host symbol | Range | Default |
 |---|---|---|---|
 | Aggro Trigger | `sensitivity` | −40 to 0 dB | −20 dB |
 | Reflex | `anticipation` | 1–20 ms | 5 ms |
@@ -39,42 +39,52 @@ Main bus (stereo) → lookahead delay (Reflex) → × gain reduction → Main ou
 
 ```
 Source/
-  PluginProcessor.h/.cpp   — AudioProcessor, APVTS parameter tree, multi-bus setup, DSP wiring, latency reporting
-  PluginEditor.h/.cpp      — AudioProcessorEditor: 4 knobs, bypass toggle, GR meter, ~30 Hz UI timer
-  DSP/                     — plain (non-JUCE) classes, each independently unit-testable
+  TankPluginAdapter.h/.cpp — DPF Plugin adapter: parameters, audio ports (incl. sidechain), DSP wiring, latency reporting
+  TankUI.h/.cpp            — DPF UI: 4 knobs, bypass toggle, GR meter, presets panel
+  DistrhoPluginInfo.h      — DPF plugin metadata (ports, IDs, UI size, etc.)
+  FactoryPresets.h         — Tank's 3 factory presets (Subtle Pump, Heavy Duck, Slow Cooldown)
+  DSP/                     — plain (framework-free) classes, each independently unit-testable
     BandpassFilter.h       — 2nd-order biquad, fixed 50–150 Hz, sidechain only
     RmsDetector.h          — windowed RMS envelope follower → level in dB
     LookaheadDelay.h        — per-channel circular delay, length = Reflex (anticipation) samples
     DuckingEnvelope.h       — idle → ramp → hold → ramp-back state machine
-  UI/
-    TankLookAndFeel.h/.cpp — bronze/brown "MMORPG tank" themed LookAndFeel (rotary knobs, labels, toggle)
-    TankGrMeter.h          — gain-reduction meter widget
-Tests/                     — JUCE-free CTest unit tests (one per DSP class)
+    SidechainGuard.h        — treats a null/missing sidechain channel pointer as silence
+  _juce_reference/          — preserved JUCE-era PluginProcessor/PluginEditor, kept unchanged as the
+                              porting reference this was migrated from (not built)
+Tests/                     — framework-free CTest unit tests (one per DSP class, plus presets)
 scripts/
-  install.sh / uninstall.sh — install/remove the packaged release build
+  install.sh / uninstall.sh — install/remove the packaged release build (VST3/CLAP/LV2)
 docs/
   superpowers/specs/       — design spec
-  superpowers/plans/       — implementation plan
+  superpowers/plans/       — implementation plan (incl. the DPF migration plan)
   images/tank-editor.png   — screenshot used above
 CMakeLists.txt
 ```
 
 ## Building
 
-Prerequisites (Linux): CMake ≥ 3.22, Ninja, and the standard JUCE system deps — see `AudioPlugins/CLAUDE.md` in the workspace root for the full `apt install` line.
+Tank is a DPF plugin (no JUCE). Prerequisites (Linux): CMake ≥ 3.22, Ninja, and DPF's DGL/NanoVG UI system deps — see `CLAUDE.md` (this repo) or `AudioPlugins/CLAUDE.md` in the workspace root for the full `apt install` line.
 
 ```bash
-# Configure (first run fetches JUCE 8.0.13 + clap-juce-extensions, ~2 min)
+# Configure (first run fetches DPF + AudioPlugins/Common into build/_deps/, ~2 min)
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 # Build
 cmake --build build --parallel
 
-# Run standalone
-./build/Tank_artefacts/Debug/Standalone/Tank
+# Build outputs (DPF layout, under build/bin/ -- no Standalone target: Tank
+# is an effect, not an instrument)
+#   build/bin/Tank.vst3/
+#   build/bin/Tank.clap
+#   build/bin/Tank.lv2/
 
-# Unit tests
+# Unit tests (DSP + presets, no DPF dependency)
 ctest --test-dir build --output-on-failure
+
+# Install plugins (Linux, dev build)
+cp -r build/bin/Tank.vst3 ~/.vst3/
+cp    build/bin/Tank.clap ~/.clap/
+cp -r build/bin/Tank.lv2  ~/.lv2/
 ```
 
 ### Release packaging
@@ -85,8 +95,8 @@ cmake --build build-release --parallel
 cd build-release && cpack
 ```
 
-Produces a portable `Tank-<version>-linux-x86_64.tar.gz` with `install.sh` / `uninstall.sh` for installing VST3 + CLAP + Standalone to the user's plugin directories.
+Produces a portable `Tank-<version>-linux-x86_64.tar.gz` with `install.sh` / `uninstall.sh` for installing VST3 + CLAP + LV2 to the user's plugin directories.
 
 ## Status
 
-Implemented: DSP chain, APVTS parameters, bronze/brown MMORPG-tank themed editor, GR meter, unit tests, release packaging with install/uninstall scripts.
+Implemented: DSP chain, DPF plugin adapter + parameters, bronze/brown MMORPG-tank themed editor, GR meter, factory presets panel, unit tests, release packaging with install/uninstall scripts. Migrated off JUCE onto DPF — see `CLAUDE.md` for the full current architecture.
