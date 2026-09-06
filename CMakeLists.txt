@@ -9,7 +9,7 @@ include(FetchContent)
 
 # DPF has no tagged releases -- pin an exact commit SHA on `main` instead.
 # Same commit Hex/Pugilist use (see cmake/patches/*.patch for why each patch
-# is needed; neither has been reported upstream yet).
+# is needed; none have been reported upstream yet).
 set(AUDIOPLUGINS_DPF_GIT_TAG "4238e1c7f0351bbe488d79f0899c540543ac7583" CACHE STRING "Pinned DPF commit")
 
 # CAVEAT (CMake FetchContent): the patch step only runs on a *fresh*
@@ -28,6 +28,9 @@ FetchContent_Declare(dpf
                    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch.cmake
             COMMAND ${CMAKE_COMMAND}
                    -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/dpf-clap-activate-latency.patch
+                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch.cmake
+            COMMAND ${CMAKE_COMMAND}
+                   -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/dpf-clap-latency-deactivate-report.patch
                    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch.cmake
 )
 FetchContent_MakeAvailable(dpf)

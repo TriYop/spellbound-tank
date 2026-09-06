@@ -1,0 +1,191 @@
+Stop PluginCLAP from calling host->latency->changed() from anywhere except
+inside activate() -- deactivate(), onMainThread() and stateLoad() were all
+still doing so directly, which clap-validator 0.4.1 rejects.
+
+Generated against DPF commit 4238e1c7f0351bbe488d79f0899c540543ac7583
+("Merge branch 'develop'", the commit pinned by AUDIOPLUGINS_DPF_GIT_TAG in
+Tank/CMakeLists.txt), with dpf-clap-state-chunked-read.patch and
+dpf-clap-activate-latency.patch already applied. File:
+distrho/src/DistrhoPluginCLAP.cpp.
+
+WHAT IS BROKEN
+--------------
+dpf-clap-activate-latency.patch fixed activate() never reporting a plugin's
+initial latency, by calling checkForLatencyChanges(true, true) +
+reportLatencyChangeIfNeeded() at the end of activate(). Its own verification
+notes said deactivate() "already honors [the CLAP latency contract]
+correctly" -- but that was only ever exercised by Hex, whose latency never
+actually changes again after the initial activate()-time report. Tank's
+"anticipation" (lookahead) parameter genuinely changes the plugin's real
+latency at runtime (TankPluginAdapter::run() calls setLatency() whenever the
+live parameter value changes the required lookahead-delay length), so its
+clap-validator run exercises call sites the Hex patch never had to.
+
+With Tank, `44 tests run, 25 passed, 6 failed`: param-set-events,
+param-set-no-cookies, param-fuzz-basic, param-fuzz-bounds,
+param-fuzz-sample-accurate and param-fuzz-modulation, all failing with:
+
+    clap_host_latency::changed
+    Must only be called within 'clap_plugin::activate'
+
+Traced with temporary fprintf instrumentation at every checkForLatencyChanges
+/ reportLatencyChangeIfNeeded call site (activate(), deactivate(),
+process(), onMainThread(), stateLoad()) to find the exact offending call,
+rather than guessing: the sequence is (1) a process() call detects a live
+latency change, takes checkForLatencyChanges()'s isActive branch, correctly
+calls request_restart() and sets fLatencyChanged=true; (2) fLastKnownLatency
+is now caught up, so process()'s own explicit checkForLatencyChanges(true,
+false) call immediately after returns early (no new change to report); (3)
+the very next host call is deactivate(), which calls
+checkForLatencyChanges(false, true) -- also an early return, since
+fLastKnownLatency already matches -- immediately followed by the
+*unconditional* reportLatencyChangeIfNeeded(), which still sees
+fLatencyChanged==true from step (1) and duly calls
+host->latency->changed(fHost) right there, from inside deactivate(). That
+call is what clap-validator flags: contrary to what the CLAP header comment
+for latency::changed() implies ("only allowed to change if the plugin is
+deactivated"), clap-validator 0.4.1's embedded host hook only accepts the
+call literally inside the clap_plugin::activate() call stack, not
+clap_plugin::deactivate() or any later main-thread callback.
+
+The same unconditional reportLatencyChangeIfNeeded() was also called from
+onMainThread() and from stateLoad() (both outside activate()'s call stack),
+so both were latent instances of the identical bug, not yet exercised by
+Tank's specific test failures but equally non-compliant.
+
+THE FIX
+-------
+checkForLatencyChanges() no longer calls host->latency->changed() directly
+under any circumstance -- it only ever sets the fLatencyChanged flag, and
+additionally calls request_restart() while active (unchanged from before).
+reportLatencyChangeIfNeeded() -- the only place that still calls changed()
+directly -- is now invoked exclusively from activate(), the one call site
+clap-validator has verified accepts it (per dpf-clap-activate-latency.patch).
+Its calls from deactivate(), onMainThread() and stateLoad() are removed;
+each of those sites still calls checkForLatencyChanges() for
+fLastKnownLatency bookkeeping (and, from deactivate()/stateLoad(), so a
+genuinely fresh change detected there still sets the flag and/or requests a
+restart), but the flag is only ever flushed by the next activate() call,
+which is always legal.
+
+VERIFICATION
+------------
+clap-validator 0.4.1 against Tank.clap, before this patch (but with
+dpf-clap-state-chunked-read.patch and dpf-clap-activate-latency.patch
+already applied): 44 tests run, 25 passed, 6 failed, 2 warnings, 11 skipped
+-- the 6 failures listed above, all "Must only be called within
+'clap_plugin::activate'".
+
+After this patch: 44 tests run, 31 passed, 0 failed, 2 warnings, 11 skipped
+(verified by name: all 6 previously-failing tests now pass). The 2 remaining
+warnings (process-audio-denormals timing, state-invalid-random accepting
+malformed state without crashing) are unrelated to latency and pre-existing.
+pluginval --strictness-level 5 on Tank.vst3 remains SUCCESS (unaffected,
+VST3 has its own latency-reporting path in DPF, not touched here). Tank's
+own 6 DSP unit tests (ctest) still pass unchanged.
+
+Not reported upstream yet -- same deliberate decision as the other two
+patches in this directory.
+
+diff --git a/distrho/src/DistrhoPluginCLAP.cpp b/distrho/src/DistrhoPluginCLAP.cpp
+--- a/distrho/src/DistrhoPluginCLAP.cpp
++++ b/distrho/src/DistrhoPluginCLAP.cpp
+@@ -836,8 +836,14 @@
+     {
+         fPlugin.deactivate();
+        #if DISTRHO_PLUGIN_WANT_LATENCY
++        // Bookkeeping only -- do NOT call reportLatencyChangeIfNeeded() here.
++        // See the comment on checkForLatencyChanges() below: clap-validator
++        // 0.4.1 only accepts a direct host->latency->changed() call from
++        // within clap_plugin::activate(), not clap_plugin::deactivate(),
++        // despite the CLAP header's own comment implying "deactivated" is a
++        // safe general window. Any pending change is flushed legally the
++        // next time activate() runs.
+         checkForLatencyChanges(false, true);
+-        reportLatencyChangeIfNeeded();
+        #endif
+     }
+
+@@ -1133,9 +1139,14 @@
+
+     void onMainThread()
+     {
+-       #if DISTRHO_PLUGIN_WANT_LATENCY
+-        reportLatencyChangeIfNeeded();
+-       #endif
++        // No latency flush here (deliberately) -- see the comment on
++        // checkForLatencyChanges() below: reportLatencyChangeIfNeeded() is
++        // only ever safe to call from within activate() itself, and
++        // onMainThread() is not that. request_restart(), already called
++        // synchronously from checkForLatencyChanges() while active, is
++        // what prompts the host to eventually cycle deactivate()/
++        // activate(), which is where the pending change actually gets
++        // reported.
+     }
+
+     // ----------------------------------------------------------------------------------------------------------------
+@@ -1421,29 +1432,34 @@
+         if (fHostExtensions.latency == nullptr)
+             return;
+
++        // Per the CLAP latency extension's contract (clap/ext/latency.h),
++        // host->latency->changed() may only be called while the plugin is
++        // deactivated; while active, request_restart() must be used
++        // instead. In practice, clap-validator 0.4.1 enforces something
++        // narrower than the header comment's "deactivated" wording implies:
++        // its embedded clap_host_latency::changed hook only accepts the
++        // call from literally within the clap_plugin::activate() call
++        // itself, not from clap_plugin::deactivate() or any main-thread
++        // callback outside it (confirmed by tracing Tank's param-set-events
++        // / param-fuzz-* failures: a direct call from deactivate()'s own
++        // main-thread report -- previously issued right here -- still
++        // failed with "Must only be called within 'clap_plugin::activate'",
++        // even though isActive was correctly false at that point). So this
++        // function never calls changed() directly at all any more; it only
++        // sets the pending flag (and, while active, additionally requests a
++        // restart). reportLatencyChangeIfNeeded() below is now only invoked
++        // from activate() -- the one verified-legal window -- where the
++        // flag gets flushed.
++        fLatencyChanged = true;
++
+         if (isActive)
+-        {
+-            fLatencyChanged = true;
+             fHost->request_restart(fHost);
+-        }
+-        else
+-        {
+-            // if this is main-thread we can report latency change directly
+-            if (fromMainThread || (fHostExtensions.threadCheck != nullptr && fHostExtensions.threadCheck->is_main_thread(fHost)))
+-            {
+-                fLatencyChanged = false;
+-                fHostExtensions.latency->changed(fHost);
+-            }
+-            // otherwise we need to request a main-thread callback
+-            else
+-            {
+-                fLatencyChanged = true;
+-                fHost->request_callback(fHost);
+-            }
+-        }
+     }
+
+-    // called from main thread
++    // Only ever called from activate() -- see the long comment on
++    // checkForLatencyChanges() above for why every other call site
++    // (deactivate(), onMainThread(), stateLoad()) was deliberately changed
++    // to stop calling this.
+     void reportLatencyChangeIfNeeded()
+     {
+         if (fLatencyChanged)
+@@ -1757,8 +1773,9 @@
+             fHostExtensions.params->rescan(fHost, CLAP_PARAM_RESCAN_VALUES|CLAP_PARAM_RESCAN_TEXT);
+
+        #if DISTRHO_PLUGIN_WANT_LATENCY
++        // Bookkeeping only, same reasoning as deactivate() above -- this is
++        // not activate()'s own call stack, so no direct reportLatencyChangeIfNeeded().
+         checkForLatencyChanges(fPlugin.isActive(), true);
+-        reportLatencyChangeIfNeeded();
+        #endif
+
+        #if DISTRHO_PLUGIN_HAS_UI
