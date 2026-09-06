@@ -1,5 +1,6 @@
 #include "TankPluginAdapter.h"
 #include "DSP/SidechainGuard.h"
+#include "extra/ScopedDenormalDisable.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -162,6 +163,13 @@ void TankPluginAdapter::deactivate()
 
 void TankPluginAdapter::run(const float** inputs, float** outputs, const uint32_t frames)
 {
+    // DPF does not set FTZ/DAZ for VST3/CLAP/LV2 hosts (only its JACK/RtAudio/SDL
+    // standalone bridges do) -- port the JUCE-era ScopedNoDenormals guard from
+    // Source/_juce_reference/PluginProcessor.cpp so RmsDetector/BandpassFilter/
+    // ParameterSmoother's exponentially-decaying state can't stall on denormals
+    // whenever the sidechain goes silent (i.e. most of the time in normal use).
+    const ScopedDenormalDisable sdd;
+
     const float* mainInL  = inputs[0];
     const float* mainInR  = inputs[1];
     const float* sidechain = inputs[2];
